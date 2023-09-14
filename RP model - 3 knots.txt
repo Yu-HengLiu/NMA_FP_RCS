@@ -1,0 +1,99 @@
+# i = patient
+# j = trial
+
+Model  {
+
+	for(j in 1:Ntrials) {
+
+	for(i in offset[j]+1:offset[j+1]) {
+
+		zeros[i] <- 0	
+
+		eta[i, j] <- A[i] + B[i]
+
+		A[i] <- gamma[1, j] + gamma[2, j]*u0[i] + gamma[3, j]*u1n[i] + gamma[4, j]*u2n[i] + gamma[5, j]*u3n[i] 	#RP formula 1. spline function
+					+ beta[1]*trt2[i] + beta[2]*trt3[i] + beta[3]*trt4[i]		# treatment effect
+					
+
+		B [i] <- beta[4]*trt2lnt[i] + beta[5]*trt3lnt[i] + beta[6]*trt4lnt[i] #interaction between ln(time) and tx, can incorporate time-varying hazard ratio
+					
+		d.sp[i, j] <- gamma[2, j]*du0[i] + gamma[3, j]*du1n[i] + gamma[4, j]*du2n[i]+ gamma[5, j]*du3n[i]		#to derive likelihood
+					+ beta[4]*trt2[i] + beta[5]*trt3[i] + beta[6]*trt4[i] 	
+					
+		
+		lnL[i] <- max( - ( d[i] * ( log( max( d.sp[i, j],0.0001) )  +  eta[i, j]- exp(eta[i, j])  )  - (1-d[i])*exp(eta[i, j]) ), 0.000001) 
+		
+		zeros[i] ~ dpois(lnL[i]) #zero trick, poisson likelihood
+	
+
+	}
+
+	
+# Prior Distributions	
+
+	for(p in 1:5) { #3 knots+min and max boundaries, parameters for spline function
+		gamma[p, j] ~ dnorm(0,0.0001)
+	}
+
+	}
+		 
+	for(p in 1:6) {	#6 parameters 3 comparators, each have 2 parameters, parameters for treatment effect
+		beta[p] ~ dnorm(0,0.0001)
+	}
+
+
+
+		   
+# Survival predictions
+
+#calculate the basis function
+phi1 <- (k4-k1)/(k4-k0)
+phi2 <- (k4-k2)/(k4-k0)
+phi3 <- (k4-k3)/(k4-k0)
+for (t in 1:maxt) {	#each time point, mo 1-120... wk 1-522...
+
+a[t] <- max(log(t)-k1, 0) 
+b[t] <- max(log(t)-k0, 0)#min
+c[t] <- max(log(t)-k4, 0)#max
+e[t] <- max(log(t)-k2, 0)
+ff[t] <- max(log(t)-k3, 0)
+
+v0[t] <- log(t)
+v1[t] <- pow(a[t], 3) - phi1*pow(b[t], 3) - (1-phi1)*pow(c[t], 3) 
+v2[t] <- pow(e[t], 3) - phi2*pow(b[t], 3) - (1-phi2)*pow(c[t], 3)
+v3[t] <- pow(ff[t], 3) - phi3*pow(b[t], 3) - (1-phi3)*pow(c[t], 3)
+
+#orthogonisation
+w0[t] <- (v0[t] -meanv0) / sdv0
+
+w1[t] <- v1[t] - (( (v1w0) / (w0w0) )*w0[t])
+w1n[t] <- ( w1[t] - meanw1 )/ sdw1	#normalised
+
+w2[t] <- v2[t] - ( ( (v2w0) / (w0w0) )*w0[t]) - ( ( (v2w1n) / (w1nw1n) )*w1n[t])
+w2n[t] <- ( w2[t] - meanw2 )/ sdw2	#normalised
+
+w3[t] <- v3[t] - ( ( (v3w0) / (w0w0) )*w0[t]) - ( ( (v3w1n) / (w1nw1n) )*w1n[t])- ( ( (v3w2n) / (w2nw2n) )*w2n[t])
+w3n[t] <- ( w3[t] - meanw3 )/ sdw3	#normalised
+
+# Survival relative to sunitinib, trial 1 as base trial (get the orthogonised basis function and then can be used to estimate log cumulative hazard---> transfered to survival function
+surv[1,t] <- exp( -exp( gamma[1, 1] + gamma[2, 1]*w0[t] + gamma[3, 1]*w1n[t] + gamma[4, 1]*w2n[t] + gamma[5, 1]*w3n[t] )) #sunitinib, no treatment effect estimation
+
+surv[2,t] <- exp( -exp( gamma[1, 1] + gamma[2, 1]*w0[t] + gamma[3, 1]*w1n[t] + gamma[4, 1]*w2n[t] + gamma[5, 1]*w3n[t]+ beta[1] + beta[4]*log(t) )) # PL
+
+surv[3,t] <- exp( -exp( gamma[1, 1] + gamma[2, 1]*w0[t] + gamma[3, 1]*w1n[t] + gamma[4, 1]*w2n[t] + gamma[5, 1]*w3n[t]+ beta[2] + beta[5]*log(t) ))	#cab
+
+surv[4,t] <- exp( -exp( gamma[1, 1] + gamma[2, 1]*w0[t] + gamma[3, 1]*w1n[t] + gamma[4, 1]*w2n[t] + gamma[5, 1]*w3n[t]+ beta[3] + beta[6]*log(t) ))	#NI
+}
+# Rank treatments at 60 months
+for (l in 1:nt) {   
+    for (m in 1:nt) {    
+      rk60[l,m] <- equals(ranked(surv[,60],m),surv[l,60])     
+    }   
+  }
+}
+
+
+
+
+
+
