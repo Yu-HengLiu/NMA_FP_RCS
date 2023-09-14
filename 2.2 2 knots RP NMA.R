@@ -19,7 +19,7 @@ setwd(path)
 data <- read.csv("NMA_data.csv")#month
 data <- read.csv("NMA_data.csv") %>%mutate(time=time*(365.25/7)/12) #mo->wk
 # Set the location for WinBUGS
-bugs.directory <- "C:/Users/YHengLiu/Desktop/winbugs143_unrestricted/winbugs14_full_patched/WinBUGS14"
+bugs.directory <- "your winbugs location/winbugs143_unrestricted/winbugs14_full_patched/WinBUGS14"
 
 # WinBUGS burn-in & simulation size
 num.sims <- 10000
